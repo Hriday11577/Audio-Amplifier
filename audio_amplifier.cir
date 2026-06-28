@@ -1,0 +1,87 @@
+* Everyday Audio Enhancer – Class AB Audio Amplifier
+* MIT Manipal, Fourth Semester ECE, JAN/MAY 2024
+* Group 3: Aditi Javeri, Anish Singhal, Hriday Raizada
+*
+* Three-stage topology:
+*   Stage 1: 2N5484 JFET input  (high input impedance)
+*   Stage 2: BC548  NPN  driver  (voltage gain)
+*   Stage 3: BD139/BD140 Class AB push-pull output
+*
+* Supply: +18 V  (regulated to +10 V for pre-driver via ZD1 + R6)
+* Load:    8 Ω speaker
+* ─────────────────────────────────────────────────────────────────
+
+* ── Power supply ──────────────────────────────────────────────
+VCC  VCC  0  DC 18
+* Full-wave rectifier not modelled here; use ideal DC source for sim
+
+* ── Input coupling ────────────────────────────────────────────
+Vin  IN   0  AC 0.1  SIN(0 0.1 1000)   ; 100 mV pk, 1 kHz test tone
+C1   IN   G1  10uF                       ; input coupling cap (≈ C1 in schematic)
+
+* ── Volume control (VR1 wiper model at 50 % position) ─────────
+VR1a  G1  MID1  500K
+VR1b  MID1  0   500K   ; total 1 MΩ, mid-tap to gate
+
+* ── Stage 1 – 2N5484 JFET amplifier ─────────────────────────
+* Gate = G1 (via VR1 wiper)
+* Drain = D1 ; Source = S1
+R1   VCC10  D1   68K    ; drain load (68 kΩ)
+R2   S1     0    1.8K   ; source degeneration
+J1   D1  G1  S1  2N5484
+
+* ── 10 V regulated rail (ZD1 + R6) ──────────────────────────
+R6   VCC  VCC10  330
+ZD1  VCC10  0    DBREAK  ; model as ideal 10 V zener
+.model DBREAK D(BV=10 IBV=1m)
+
+* ── Stage 2 – BC548 NPN common-emitter ───────────────────────
+C2   D1   B2   2.2uF    ; AC coupling between stages
+R3   VCC10 B2  68K      ; (not in original BOM — bias divider pair implied)
+R4   B2    0   10K
+R5   VCC10 C2n 6.8K     ; collector load
+R6e  E2    0   220      ; emitter resistor (R value from BOM)
+Q2   C2n  B2  E2  BC548
+
+* ── Quiescent bias decoupling ────────────────────────────────
+C8   E2   0   470uF     ; bypasses AC on emitter (DC-only feedback loop)
+
+* ── Negative feedback: R13 from output back to T2 emitter ────
+R13  OUT  E2  56        ; 56 Ω (from BOM)
+
+* ── Stage 3 pre-driver – BC639 NPN ──────────────────────────
+R7   VCC  B3   180      ; bootstrap bias upper (with C4 bootstrap)
+R8   B3   E4E5 180      ; bootstrap bias lower
+C4   OUT  B3   220uF    ; bootstrap capacitor
+Q3   C3   C2n  E3  BC639
+R9   C3   B4   33       ; base stopper resistor to T4
+
+* ── Class AB bias – VR3 + D1 diode ─────────────────────────
+VR3  B4   B5   50       ; 50 Ω of the 100 Ω preset (mid position)
+D2   B4   B5   1N4148   ; thermal tracking diode (D1 in schematic)
+
+* ── Output stage – BD139 (NPN) + BD140 (PNP) push-pull ─────
+Q4   VCC  B4   OUT  BD139    ; NPN, sources current on positive half
+Q5   0    B5   OUT  BD140    ; PNP, sinks current on negative half
+
+* ── Output section ──────────────────────────────────────────
+R_out  OUT  LOAD  6.8        ; 6.8 Ω output resistor (from BOM)
+C_out  LOAD SPKR  2200uF     ; output coupling capacitor
+R_spk  SPKR  0   8           ; 8 Ω speaker load
+
+* ── Models ──────────────────────────────────────────────────
+.model 2N5484 NJF(Beta=7m Vto=-3 Lambda=4m)
+.model BC548  NPN(IS=1e-14 BF=300 VAF=100 IKF=0.1 ISE=6e-15 NE=1.7 BR=4 RC=0.3 CJC=5p CJE=12p TF=0.5n)
+.model BC639  NPN(IS=1e-14 BF=100 VAF=80  IKF=0.5 RC=0.2)
+.model BD139  NPN(IS=1e-14 BF=100 VAF=80  IKF=1.5 RC=0.1 CJC=80p CJE=200p TF=2n)
+.model BD140  PNP(IS=1e-14 BF=100 VAF=80  IKF=1.5 RC=0.1 CJC=80p CJE=200p TF=2n)
+.model 1N4148 D(IS=2.52n N=1.752 Rs=0.568 Ikf=0 Xti=3 Eg=1.11 Cjo=4p M=0.4 Vj=0.6)
+
+* ── Analysis ─────────────────────────────────────────────────
+.op                             ; DC operating point
+.ac dec 100 20 20k              ; frequency sweep 20 Hz – 20 kHz
+.tran 1u 5m                     ; transient: 5 ms, 1 µs step
+.meas AC VoutAC MAX V(SPKR)     ; peak output in AC sweep
+.meas AC Gain   PARAM 20*log10(VoutAC/0.1)   ; voltage gain in dB
+
+.end
